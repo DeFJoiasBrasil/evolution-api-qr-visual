@@ -1,0 +1,15 @@
+{
+  "name": "evolution-api",
+  "version": "1.0.0",
+  "description": "API para envio de mensagens no WhatsApp com QR Code visual",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "qrcode": "^1.5.1",
+    "whatsapp-web.js": "^1.18.4",
+    "puppeteer": "^21.3.8"
+  }
+}

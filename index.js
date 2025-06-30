@@ -1,63 +1,78 @@
-const express = require('express');
-const qrcode = require('qrcode');
-const { Client } = require('whatsapp-web.js');
+// Arquivo: index.js
 
+const express = require('express');
+const multer = require('multer');
+const cors = require('cors');
+const bodyParser = require('body-parser');
+const fs = require('fs');
+const axios = require('axios');
+const FormData = require('form-data');
 const app = express();
-app.use(express.json());
+const upload = multer();
+
+app.use(cors());
+app.use(bodyParser.json());
+app.use(bodyParser.urlencoded({ extended: true }));
 
 const PORT = process.env.PORT || 8080;
-const API_KEY = process.env.AUTHENTICATION_API_KEY || 'default';
 
-let qrCodeData = null;
+// Webhook de entrada (cliente -> IA)
+app.post('/webhook', upload.single('audio'), async (req, res) => {
+  try {
+    const data = req.body;
+    const isAudio = data.type === 'audio';
+    const from = data.from;
+    const messageText = data.body || '';
+    const timestamp = new Date().toISOString();
 
-const client = new Client({
-    puppeteer: {
-        args: ['--no-sandbox', '--disable-setuid-sandbox'],
-    }
-});
+    const payload = {
+      from,
+      type: data.type,
+      timestamp,
+      ...(isAudio ? { audio: req.file } : { body: messageText })
+    };
 
-client.on('qr', async (qr) => {
-    console.log('QR Code recebido. Escaneie com o WhatsApp.');
-    qrCodeData = await qrcode.toDataURL(qr);
-});
-client.on('ready', () => {
-    console.log('✅ Cliente conectado e pronto para uso!');
-});
-client.initialize();
+    if (isAudio) {
+      const form = new FormData();
+      form.append('audio', req.file.buffer, {
+        filename: 'audio.ogg',
+        contentType: req.file.mimetype
+      });
+      form.append('from', from);
+      form.append('type', 'audio');
 
-app.get('/qr', (req, res) => {
-    if (!qrCodeData) {
-        return res.send('<h2>Aguardando geração do QR Code...</h2>');
-    }
-
-    const html = `
-        <html>
-        <head><title>QR Code - WhatsApp</title></head>
-        <body style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;">
-            <h1>Escaneie o QR Code</h1>
-            <img src="${qrCodeData}" style="width:300px;height:300px;" />
-        </body>
-        </html>
-    `;
-    res.send(html);
-});
-
-app.post('/message/sendWhatsappText/default', (req, res) => {
-    const apiKeyHeader = req.headers['apikey'];
-    if (apiKeyHeader !== API_KEY) {
-        return res.status(401).json({ error: 'Chave de API inválida.' });
+      await axios.post('https://SEU_N8N_DOMAIN/webhook/vendedor-ia', form, {
+        headers: form.getHeaders()
+      });
+    } else {
+      await axios.post('https://SEU_N8N_DOMAIN/webhook/vendedor-ia', payload);
     }
 
+    res.status(200).json({ success: true });
+  } catch (error) {
+    console.error('Erro no webhook:', error.message);
+    res.status(500).json({ error: 'Erro interno no webhook' });
+  }
+});
+
+// Rota para envio de mensagem de texto no WhatsApp
+app.post('/message/sendWhatsappText/default', async (req, res) => {
+  try {
     const { number, text } = req.body;
     if (!number || !text) {
-        return res.status(400).json({ error: 'Número e texto são obrigatórios.' });
+      return res.status(400).json({ error: 'Parâmetros ausentes: number ou text' });
     }
 
-    client.sendMessage(`${number}@c.us`, text)
-        .then(response => res.json({ success: true, response }))
-        .catch(error => res.status(500).json({ error: error.message }));
+    // Aqui você colocaria o código de envio real via whatsapp-web.js ou sistema equivalente
+    console.log(`Enviando mensagem para ${number}: ${text}`);
+    // Simulação de envio (mock)
+    res.status(200).json({ success: true, to: number, text });
+  } catch (error) {
+    console.error('Erro ao enviar mensagem:', error.message);
+    res.status(500).json({ error: 'Erro ao enviar mensagem' });
+  }
 });
 
 app.listen(PORT, () => {
-    console.log(`🚀 Evolution API rodando na porta ${PORT}`);
+  console.log(`🚀 Evolution API rodando na porta ${PORT}`);
 });

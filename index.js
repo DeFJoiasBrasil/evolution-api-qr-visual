@@ -7,6 +7,8 @@ const bodyParser = require('body-parser');
 const fs = require('fs');
 const axios = require('axios');
 const FormData = require('form-data');
+const { Client, LocalAuth } = require('whatsapp-web.js');
+const qrcode = require('qrcode-terminal');
 const app = express();
 const upload = multer();
 
@@ -16,7 +18,38 @@ app.use(bodyParser.urlencoded({ extended: true }));
 
 const PORT = process.env.PORT || 8080;
 
-// Webhook de entrada (cliente -> IA)
+// Inicializa o WhatsApp Web
+const client = new Client({
+  authStrategy: new LocalAuth(),
+  puppeteer: {
+    args: ["--no-sandbox", "--disable-setuid-sandbox"]
+  }
+});
+
+client.on('qr', qr => {
+  console.clear();
+  console.log('📲 Escaneie o QR Code abaixo para conectar seu WhatsApp:');
+  qrcode.generate(qr, { small: true });
+});
+
+client.on('ready', () => {
+  console.log('✅ WhatsApp conectado com sucesso!');
+});
+
+client.on('authenticated', () => {
+  console.log('🔒 Autenticado com sucesso!');
+});
+
+client.on('auth_failure', msg => {
+  console.error('❌ Falha na autenticação:', msg);
+});
+
+client.on('disconnected', reason => {
+  console.log('🔌 Desconectado do WhatsApp:', reason);
+});
+
+client.initialize();
+
 app.post('/webhook', upload.single('audio'), async (req, res) => {
   try {
     const data = req.body;
@@ -55,7 +88,6 @@ app.post('/webhook', upload.single('audio'), async (req, res) => {
   }
 });
 
-// Rota para envio de mensagem de texto no WhatsApp
 app.post('/message/sendWhatsappText/default', async (req, res) => {
   try {
     const { number, text } = req.body;
@@ -63,12 +95,11 @@ app.post('/message/sendWhatsappText/default', async (req, res) => {
       return res.status(400).json({ error: 'Parâmetros ausentes: number ou text' });
     }
 
-    // Aqui você colocaria o código de envio real via whatsapp-web.js ou sistema equivalente
-    console.log(`Enviando mensagem para ${number}: ${text}`);
-    // Simulação de envio (mock)
+    console.log(`📤 Enviando mensagem para ${number}: ${text}`);
+    await client.sendMessage(`${number}@c.us`, text);
     res.status(200).json({ success: true, to: number, text });
   } catch (error) {
-    console.error('Erro ao enviar mensagem:', error.message);
+    console.error('❌ Erro ao enviar mensagem:', error.message);
     res.status(500).json({ error: 'Erro ao enviar mensagem' });
   }
 });
